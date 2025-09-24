@@ -1,6 +1,6 @@
 {
   "name": "vite-plugin-resolve-barrels",
-  "version": "0.0.1",
+  "version": "0.0.1-beta3",
   "description": "Vite plugin for optimizing React barrel file imports - reduces bundle size and improves build performance",
   "type": "module",
   "main": "dist/index.js",
