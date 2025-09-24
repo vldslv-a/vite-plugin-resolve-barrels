@@ -1,0 +1,64 @@
+name: Linting
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Generate a token
+        id: generate-token
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ vars.APP_ID }}
+          private-key: ${{ secrets.APP_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          registry-url: https://npm.pkg.github.com
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Check code style
+        run: npm run lint:js
+        continue-on-error: true
+
+      - name: Annotate Code Linting Results
+        uses: ataylorme/eslint-annotate-action@v3
+        with:
+          GITHUB_TOKEN: ${{ steps.generate-token.outputs.token }}
+          report-json: reports/eslint_report.json
+          only-pr-files: true
+          fail-on-warning: false
+          fail-on-error: true
+          markdown-report-on-step-summary: true
+
+      - name: Check types
+        run: npm run check-types
+
+      - name: Run tests
+        run: npm run test
+
+      - name: Test Report
+        uses: dorny/test-reporter@v1
+        if: success() || failure()
+        with:
+          name: Test report
+          path: reports/jest-*.xml
+          reporter: jest-junit
+          token: ${{ steps.generate-token.outputs.token }}
