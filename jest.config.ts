@@ -11,6 +11,19 @@ const config: Config.InitialOptions = {
   transform: {
     '^.+\\.ts$': 'ts-jest',
   },
+  reporters: [
+    'default',
+    [
+      'jest-junit',
+      {
+        outputDirectory: 'reports',
+        outputName: 'jest-junit.xml',
+        suiteNameTemplate: '{filename}',
+        ancestorSeparator: ' › ',
+        uniqueOutputName: 'false',
+      },
+    ],
+  ],
 };
 
 export default config;
