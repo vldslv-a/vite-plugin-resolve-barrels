@@ -23,7 +23,7 @@ jobs:
         run: npm install
 
       - name: Build
-        run: npm run vite:build
+        run: npm run build
 
       - name: Update package.json version
         run: |
