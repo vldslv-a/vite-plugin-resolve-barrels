@@ -1,3 +1,5 @@
+/* eslint-disable sonarjs/no-duplicate-string */
+
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
@@ -349,6 +351,154 @@ test('resolveExportThroughBarrel follows candidateDir when module spec is direct
   callPluginMethod(plugin, 'buildEnd');
 });
 
+test('resolves aliased imports with @ alias', () => {
+  const fooPath = path.join(tmpDir, 'src', 'widgets', 'foo.ts');
+  fs.writeFileSync(fooPath, 'export const Component = 42;\n');
+
+  const indexPath = path.join(tmpDir, 'src', 'widgets', 'index.ts');
+  fs.writeFileSync(indexPath, "export { Component } from './foo';\n");
+
+  const consumerPath = path.join(tmpDir, 'src', 'consumer', 'file.ts');
+  const originalCode = "import { Component } from '@/widgets';\nconsole.log(Component);\n";
+  fs.writeFileSync(consumerPath, originalCode);
+
+  process.chdir(tmpDir);
+
+  const plugin = resolveBarrelsPlugin({
+    directories: ['widgets'],
+    enable: true,
+    alias: { '@': 'src' },
+  });
+  callPluginMethod(plugin, 'buildStart');
+
+  const res = callPluginMethod(plugin, 'transform', originalCode, consumerPath);
+
+  expect(res).not.toBeNull();
+  expect(res!.code).toContain("import { Component } from '");
+  expect(res!.code).toContain('widgets/foo');
+
+  callPluginMethod(plugin, 'buildEnd');
+});
+
+test('resolves aliased imports with custom alias prefix', () => {
+  const barPath = path.join(tmpDir, 'src', 'widgets', 'bar.ts');
+  fs.writeFileSync(barPath, 'export const Widget = 99;\n');
+
+  const indexPath = path.join(tmpDir, 'src', 'widgets', 'index.ts');
+  fs.writeFileSync(indexPath, "export { Widget } from './bar';\n");
+
+  const consumerPath = path.join(tmpDir, 'src', 'consumer', 'file.ts');
+  const originalCode = "import { Widget } from '@widgets';\n";
+  fs.writeFileSync(consumerPath, originalCode);
+
+  process.chdir(tmpDir);
+
+  const plugin = resolveBarrelsPlugin({
+    directories: ['widgets'],
+    enable: true,
+    alias: { '@widgets': 'src/widgets' },
+  });
+  callPluginMethod(plugin, 'buildStart');
+
+  const res = callPluginMethod(plugin, 'transform', originalCode, consumerPath);
+
+  expect(res).not.toBeNull();
+  expect(res!.code).toContain("import { Widget } from '");
+  expect(res!.code).toContain('widgets/bar');
+
+  callPluginMethod(plugin, 'buildEnd');
+});
+
+test('handles multiple aliases correctly', () => {
+  const fooPath = path.join(tmpDir, 'src', 'widgets', 'foo.ts');
+  fs.writeFileSync(fooPath, 'export const A = 1;\n');
+
+  const indexPath = path.join(tmpDir, 'src', 'widgets', 'index.ts');
+  fs.writeFileSync(indexPath, "export { A } from './foo';\n");
+
+  const consumerPath = path.join(tmpDir, 'src', 'consumer', 'file.ts');
+  const originalCode = "import { A } from '@/widgets';\nimport { B } from '~/widgets';\n";
+  fs.writeFileSync(consumerPath, originalCode);
+
+  process.chdir(tmpDir);
+
+  const plugin = resolveBarrelsPlugin({
+    directories: ['widgets'],
+    enable: true,
+    alias: { '@': 'src', '~': 'src' },
+  });
+  callPluginMethod(plugin, 'buildStart');
+
+  const res = callPluginMethod(plugin, 'transform', originalCode, consumerPath);
+
+  expect(res).not.toBeNull();
+  expect(res!.code).toContain("import { A } from '");
+  expect(res!.code).toContain('widgets/foo');
+
+  callPluginMethod(plugin, 'buildEnd');
+});
+
+test('non-aliased imports still work when aliases are configured', () => {
+  const fooPath = path.join(tmpDir, 'src', 'widgets', 'foo.ts');
+  fs.writeFileSync(fooPath, 'export const Component = 42;\n');
+
+  const indexPath = path.join(tmpDir, 'src', 'widgets', 'index.ts');
+  fs.writeFileSync(indexPath, "export { Component } from './foo';\n");
+
+  const consumerPath = path.join(tmpDir, 'src', 'consumer', 'file.ts');
+  const originalCode = "import { Component } from 'widgets';\nconsole.log(Component);\n";
+  fs.writeFileSync(consumerPath, originalCode);
+
+  process.chdir(tmpDir);
+
+  const plugin = resolveBarrelsPlugin({
+    directories: ['widgets'],
+    enable: true,
+    alias: { '@': 'src' },
+  });
+  callPluginMethod(plugin, 'buildStart');
+
+  const res = callPluginMethod(plugin, 'transform', originalCode, consumerPath);
+
+  expect(res).not.toBeNull();
+  expect(res!.code).toContain("import { Component } from '");
+  expect(res!.code).toContain('widgets/foo');
+
+  callPluginMethod(plugin, 'buildEnd');
+});
+
+test('alias resolution matches longest prefix first', () => {
+  const fooPath = path.join(tmpDir, 'src', 'widgets', 'foo.ts');
+  fs.writeFileSync(fooPath, 'export const Component = 42;\n');
+
+  const indexPath = path.join(tmpDir, 'src', 'widgets', 'index.ts');
+  fs.writeFileSync(indexPath, "export { Component } from './foo';\n");
+
+  const consumerPath = path.join(tmpDir, 'src', 'consumer', 'file.ts');
+  const originalCode = "import { Component } from '@app/widgets';\n";
+  fs.writeFileSync(consumerPath, originalCode);
+
+  process.chdir(tmpDir);
+
+  const plugin = resolveBarrelsPlugin({
+    directories: ['widgets'],
+    enable: true,
+    alias: {
+      '@': 'other/path',
+      '@app': 'src',
+    },
+  });
+  callPluginMethod(plugin, 'buildStart');
+
+  const res = callPluginMethod(plugin, 'transform', originalCode, consumerPath);
+
+  expect(res).not.toBeNull();
+  expect(res!.code).toContain("import { Component } from '");
+  expect(res!.code).toContain('widgets/foo');
+
+  callPluginMethod(plugin, 'buildEnd');
+});
+
 test('external re-export with same name imports from package specifier', () => {
   const srcDir = path.join(tmpDir, 'src', 'widgets');
   fs.mkdirSync(srcDir, { recursive: true });
@@ -482,4 +632,255 @@ test('handles external import aliases correctly', () => {
   // Should import from external package with correct aliasing
   expect(code).toContain("import { ExternalItem as MyName } from 'external-pkg'");
   callPluginMethod(plugin, 'buildEnd');
+});
+
+describe('Non-index.ts barrel files', () => {
+  test('resolves from api.ts barrel file', () => {
+    const srcDir = path.join(tmpDir, 'src', 'api');
+    fs.mkdirSync(srcDir, { recursive: true });
+
+    // Create api.ts barrel file
+    const apiBarrel = path.join(srcDir, 'api.ts');
+    fs.writeFileSync(apiBarrel, "export { UserService } from './services';\n");
+
+    // Create the actual service file
+    const servicePath = path.join(srcDir, 'services.ts');
+    fs.writeFileSync(servicePath, 'export const UserService = { name: "user" };\n');
+
+    const consumerPath = path.join(tmpDir, 'src', 'consumer', 'api-consumer.ts');
+    const originalCode = "import { UserService } from 'api';\n";
+    fs.writeFileSync(consumerPath, originalCode);
+
+    process.chdir(tmpDir);
+    const plugin = resolveBarrelsPlugin({
+      directories: ['api'],
+      barrelFiles: ['api.ts', 'index.ts'],
+      enable: true,
+    });
+    callPluginMethod(plugin, 'buildStart');
+    const res = callPluginMethod(plugin, 'transform', originalCode, consumerPath);
+
+    expect(res).not.toBeNull();
+    expect(res!.code).toContain('services');
+    expect(res!.code).toContain('UserService');
+    callPluginMethod(plugin, 'buildEnd');
+  });
+
+  test('resolves from models.ts barrel file', () => {
+    const srcDir = path.join(tmpDir, 'src', 'api');
+    fs.mkdirSync(srcDir, { recursive: true });
+
+    const modelsBarrel = path.join(srcDir, 'models.ts');
+    fs.writeFileSync(modelsBarrel, "export { User } from './types';\n");
+
+    const typesPath = path.join(srcDir, 'types.ts');
+    fs.writeFileSync(typesPath, 'export interface User { id: number; }\n');
+
+    const consumerPath = path.join(tmpDir, 'src', 'consumer', 'models-consumer.ts');
+    const originalCode = "import { User } from 'api';\n";
+    fs.writeFileSync(consumerPath, originalCode);
+
+    process.chdir(tmpDir);
+    const plugin = resolveBarrelsPlugin({
+      directories: ['api'],
+      barrelFiles: ['models.ts', 'api.ts', 'index.ts'],
+      enable: true,
+    });
+    callPluginMethod(plugin, 'buildStart');
+    const res = callPluginMethod(plugin, 'transform', originalCode, consumerPath);
+
+    expect(res).not.toBeNull();
+    expect(res!.code).toContain('types');
+    callPluginMethod(plugin, 'buildEnd');
+  });
+
+  test('tries barrel files in order until finds match', () => {
+    const srcDir = path.join(tmpDir, 'src', 'data');
+    fs.mkdirSync(srcDir, { recursive: true });
+
+    // Only create api.ts, not index.ts
+    const apiBarrel = path.join(srcDir, 'api.ts');
+    fs.writeFileSync(apiBarrel, "export { getData } from './fetcher';\n");
+
+    const fetcherPath = path.join(srcDir, 'fetcher.ts');
+    fs.writeFileSync(fetcherPath, 'export const getData = () => {};\n');
+
+    const consumerPath = path.join(tmpDir, 'src', 'consumer', 'data-consumer.ts');
+    const originalCode = "import { getData } from 'data';\n";
+    fs.writeFileSync(consumerPath, originalCode);
+
+    process.chdir(tmpDir);
+    const plugin = resolveBarrelsPlugin({
+      directories: ['data'],
+      barrelFiles: ['index.ts', 'api.ts', 'models.ts'], // index.ts doesn't exist
+      enable: true,
+    });
+    callPluginMethod(plugin, 'buildStart');
+    const res = callPluginMethod(plugin, 'transform', originalCode, consumerPath);
+
+    expect(res).not.toBeNull();
+    expect(res!.code).toContain('fetcher');
+    callPluginMethod(plugin, 'buildEnd');
+  });
+});
+
+describe('preserveExtensions option', () => {
+  test('strips extensions by default', () => {
+    const fooPath = path.join(tmpDir, 'src', 'widgets', 'foo.ts');
+    fs.writeFileSync(fooPath, 'export const Component = 42;\n');
+
+    const indexPath = path.join(tmpDir, 'src', 'widgets', 'index.ts');
+    fs.writeFileSync(indexPath, "export { Component } from './foo';\n");
+
+    const consumerPath = path.join(tmpDir, 'src', 'consumer', 'file.ts');
+    const originalCode = "import { Component } from 'widgets';\n";
+    fs.writeFileSync(consumerPath, originalCode);
+
+    process.chdir(tmpDir);
+    const plugin = resolveBarrelsPlugin({ directories: ['widgets'], enable: true });
+    callPluginMethod(plugin, 'buildStart');
+    const res = callPluginMethod(plugin, 'transform', originalCode, consumerPath);
+
+    expect(res).not.toBeNull();
+    expect(res!.code).toContain('widgets/foo');
+    expect(res!.code).not.toContain('.ts');
+    callPluginMethod(plugin, 'buildEnd');
+  });
+
+  test('preserves extensions when preserveExtensions is true', () => {
+    const fooPath = path.join(tmpDir, 'src', 'widgets', 'foo.ts');
+    fs.writeFileSync(fooPath, 'export const Component = 42;\n');
+
+    const indexPath = path.join(tmpDir, 'src', 'widgets', 'index.ts');
+    fs.writeFileSync(indexPath, "export { Component } from './foo';\n");
+
+    const consumerPath = path.join(tmpDir, 'src', 'consumer', 'file.ts');
+    const originalCode = "import { Component } from 'widgets';\n";
+    fs.writeFileSync(consumerPath, originalCode);
+
+    process.chdir(tmpDir);
+    const plugin = resolveBarrelsPlugin({
+      directories: ['widgets'],
+      preserveExtensions: true,
+      enable: true,
+    });
+    callPluginMethod(plugin, 'buildStart');
+    const res = callPluginMethod(plugin, 'transform', originalCode, consumerPath);
+
+    expect(res).not.toBeNull();
+    expect(res!.code).toContain('widgets/foo.ts');
+    callPluginMethod(plugin, 'buildEnd');
+  });
+});
+
+describe('Non-src rootDir', () => {
+  test('resolves from lib directory as rootDir', () => {
+    // Create lib directory instead of src
+    const libDir = path.join(tmpDir, 'lib', 'widgets');
+    fs.mkdirSync(libDir, { recursive: true });
+    fs.mkdirSync(path.join(tmpDir, 'lib', 'consumer'), { recursive: true });
+
+    const fooPath = path.join(libDir, 'foo.ts');
+    fs.writeFileSync(fooPath, 'export const Component = 42;\n');
+
+    const indexPath = path.join(libDir, 'index.ts');
+    fs.writeFileSync(indexPath, "export { Component } from './foo';\n");
+
+    const consumerPath = path.join(tmpDir, 'lib', 'consumer', 'file.ts');
+    const originalCode = "import { Component } from 'widgets';\n";
+    fs.writeFileSync(consumerPath, originalCode);
+
+    process.chdir(tmpDir);
+    const plugin = resolveBarrelsPlugin({
+      directories: ['widgets'],
+      rootDir: 'lib',
+      enable: true,
+    });
+    callPluginMethod(plugin, 'buildStart');
+    const res = callPluginMethod(plugin, 'transform', originalCode, consumerPath);
+
+    expect(res).not.toBeNull();
+    expect(res!.code).toContain('Component');
+    expect(res!.code).toContain('foo');
+    callPluginMethod(plugin, 'buildEnd');
+  });
+
+  test('handles multiple rootDirs', () => {
+    // Create widgets in lib/
+    const libDir = path.join(tmpDir, 'lib', 'widgets');
+    fs.mkdirSync(libDir, { recursive: true });
+
+    const libComponent = path.join(libDir, 'lib-component.ts');
+    fs.writeFileSync(libComponent, 'export const LibComponent = 1;\n');
+
+    const libIndex = path.join(libDir, 'index.ts');
+    fs.writeFileSync(libIndex, "export { LibComponent } from './lib-component';\n");
+
+    // Create features in src/
+    const srcDir = path.join(tmpDir, 'src', 'features');
+    fs.mkdirSync(srcDir, { recursive: true });
+
+    const srcComponent = path.join(srcDir, 'src-component.ts');
+    fs.writeFileSync(srcComponent, 'export const SrcComponent = 2;\n');
+
+    const srcIndex = path.join(srcDir, 'index.ts');
+    fs.writeFileSync(srcIndex, "export { SrcComponent } from './src-component';\n");
+
+    // Consumer in src/
+    fs.mkdirSync(path.join(tmpDir, 'src', 'consumer'), { recursive: true });
+    const consumerPath = path.join(tmpDir, 'src', 'consumer', 'file.ts');
+    const originalCode = ["import { LibComponent } from 'widgets';", "import { SrcComponent } from 'features';"].join(
+      '\n'
+    );
+    fs.writeFileSync(consumerPath, originalCode);
+
+    process.chdir(tmpDir);
+    const plugin = resolveBarrelsPlugin({
+      directories: ['widgets', 'features'],
+      rootDir: ['lib', 'src'], // Multiple roots
+      enable: true,
+    });
+    callPluginMethod(plugin, 'buildStart');
+    const res = callPluginMethod(plugin, 'transform', originalCode, consumerPath);
+
+    expect(res).not.toBeNull();
+    expect(res!.code).toContain('LibComponent');
+    expect(res!.code).toContain('lib-component');
+    expect(res!.code).toContain('SrcComponent');
+    expect(res!.code).toContain('src-component');
+    callPluginMethod(plugin, 'buildEnd');
+  });
+});
+
+describe('Enhanced alias resolution with custom rootDirs', () => {
+  test('resolves alias pointing to non-src directory', () => {
+    const libDir = path.join(tmpDir, 'lib', 'widgets');
+    fs.mkdirSync(libDir, { recursive: true });
+    fs.mkdirSync(path.join(tmpDir, 'src', 'consumer'), { recursive: true });
+
+    const component = path.join(libDir, 'component.ts');
+    fs.writeFileSync(component, 'export const Widget = 1;\n');
+
+    const indexPath = path.join(libDir, 'index.ts');
+    fs.writeFileSync(indexPath, "export { Widget } from './component';\n");
+
+    const consumerPath = path.join(tmpDir, 'src', 'consumer', 'file.ts');
+    const originalCode = "import { Widget } from '@lib/widgets';\n";
+    fs.writeFileSync(consumerPath, originalCode);
+
+    process.chdir(tmpDir);
+    const plugin = resolveBarrelsPlugin({
+      directories: ['widgets'],
+      rootDir: 'lib',
+      alias: { '@lib': 'lib' },
+      enable: true,
+    });
+    callPluginMethod(plugin, 'buildStart');
+    const res = callPluginMethod(plugin, 'transform', originalCode, consumerPath);
+
+    expect(res).not.toBeNull();
+    expect(res!.code).toContain('Widget');
+    expect(res!.code).toContain('component');
+    callPluginMethod(plugin, 'buildEnd');
+  });
 });

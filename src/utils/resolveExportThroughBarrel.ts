@@ -11,7 +11,8 @@ type ExportInfo = { name: string; local?: string; isReexport?: boolean; module?:
 export function resolveExportThroughBarrel(
   barrelDir: string,
   exportName: string,
-  exportMap: Map<string, string>
+  exportMap: Map<string, string>,
+  barrelFiles: string[] = ['index.ts', 'index.tsx', 'index.js', 'index.jsx']
 ): ResolveResult {
   // First try: read the barrel index and follow re-exports recursively (safer, avoids cross-barrel collisions)
   const visited = new Set<string>();
@@ -109,9 +110,7 @@ export function resolveExportThroughBarrel(
   }
 
   function processParentReexports(dir: string): ResolveResult {
-    const indexFiles = ['index.ts', 'index.tsx', 'index.js', 'index.jsx'];
-
-    for (const f of indexFiles) {
+    for (const f of barrelFiles) {
       const idx = path.join(dir, f);
       if (!fs.existsSync(idx)) continue;
 
@@ -158,10 +157,8 @@ export function resolveExportThroughBarrel(
   }
 
   function walkIndex(dir: string): ResolveResult {
-    const indexFiles = ['index.ts', 'index.tsx', 'index.js', 'index.jsx'];
-
     // Process index files first
-    for (const f of indexFiles) {
+    for (const f of barrelFiles) {
       const idx = path.join(dir, f);
       if (!fs.existsSync(idx)) continue;
 

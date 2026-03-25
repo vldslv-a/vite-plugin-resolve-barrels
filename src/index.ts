@@ -19,6 +19,27 @@ type Options = {
   logToFile?: boolean;
   /** Log file path */
   logFilePath?: string;
+  /**
+   * Path aliases configuration. Maps alias prefixes to their actual paths.
+   * Example: { '@': 'src', '@widgets': 'src/widgets' }
+   */
+  alias?: Record<string, string>;
+  /**
+   * Barrel file names to recognize (default: ['index.ts', 'index.tsx', 'index.js', 'index.jsx'])
+   * Example: ['index.ts', 'api.ts', 'models.ts']
+   */
+  barrelFiles?: string[];
+  /**
+   * Root directory to scan for barrel files (default: 'src')
+   * Can be a single directory or array of directories
+   * Example: 'lib' or ['src', 'lib', 'components']
+   */
+  rootDir?: string[] | string;
+  /**
+   * Preserve file extensions in resolved imports (default: false)
+   * When true, imports like './module.ts' will keep the .ts extension
+   */
+  preserveExtensions?: boolean;
 };
 
 /**
@@ -32,12 +53,60 @@ export function resolveBarrelsPlugin(options: Options) {
   const log = options.logReplacements ?? false;
   const logToFile = options.logToFile ?? false;
   const logFilePathOption = options.logFilePath ?? '';
+  const aliases = options.alias ?? {};
+  const barrelFiles = options.barrelFiles ?? ['index.ts', 'index.tsx', 'index.js', 'index.jsx'];
+  const rootDirs = Array.isArray(options.rootDir) ? options.rootDir : [options.rootDir ?? 'src'];
+  const preserveExtensions = options.preserveExtensions ?? false;
 
   // build cache per run
   let projectRoot = process.cwd();
   const maps = new Map<string, Map<string, string>>(); // dir -> exportMap
   let logsBuffer: string[] = [];
   let resolvedLogFilePath: string | null = null;
+
+  /**
+   * Resolves an import specifier if it uses a configured alias.
+   * Returns { resolved: true, path: 'resolved/path' } if alias was found and resolved,
+   * or { resolved: false, path: originalSpec } if no alias matched.
+   * The returned path is relative to rootDir directory (rootDir prefix is stripped if present).
+   */
+  // eslint-disable-next-line sonarjs/cognitive-complexity
+  const resolveAlias = (spec: string): { resolved: boolean; path: string } => {
+    // Sort aliases by length (descending) to match longest first
+    const sortedAliases = Object.keys(aliases).sort((a, b) => b.length - a.length);
+
+    for (const alias of sortedAliases) {
+      if (spec === alias || spec.startsWith(`${alias}/`)) {
+        const aliasPath = aliases[alias];
+        if (!aliasPath) continue; // Skip if alias path is not defined
+
+        const remainder = spec.slice(alias.length);
+        let resolvedPath = remainder.startsWith('/') ? aliasPath + remainder : `${aliasPath}/${remainder}`;
+
+        // Remove leading './' if present and normalize
+        resolvedPath = resolvedPath.replace(/^\.\//, '').replace(/\/+/g, '/');
+
+        // Strip rootDir prefix if present, since the plugin assumes paths are relative to rootDir
+        for (const rootDir of rootDirs) {
+          const rootDirWithSlash = `${rootDir}/`;
+          if (resolvedPath.startsWith(rootDirWithSlash)) {
+            resolvedPath = resolvedPath.slice(rootDirWithSlash.length);
+            break;
+          } else if (resolvedPath === rootDir) {
+            resolvedPath = '';
+            break;
+          }
+        }
+
+        return {
+          resolved: true,
+          path: resolvedPath,
+        };
+      }
+    }
+
+    return { resolved: false, path: spec };
+  };
 
   return {
     name: 'vite:resolve-barrels',
@@ -59,7 +128,14 @@ export function resolveBarrelsPlugin(options: Options) {
         }
       }
       for (const d of options.directories) {
-        maps.set(d, buildExportMap(path.join(projectRoot, 'src'), d));
+        // Try each rootDir until we find the directory
+        for (const rootDir of rootDirs) {
+          const dirPath = path.join(projectRoot, rootDir, d);
+          if (fs.existsSync(dirPath)) {
+            maps.set(d, buildExportMap(path.join(projectRoot, rootDir), d));
+            break;
+          }
+        }
       }
     },
 
@@ -93,15 +169,35 @@ export function resolveBarrelsPlugin(options: Options) {
         if (ts.isImportDeclaration(node) && ts.isStringLiteral(node.moduleSpecifier)) {
           const spec = node.moduleSpecifier.text;
 
+          // Try to resolve alias first
+          const { path: resolvedSpec, resolved: isAliased } = resolveAlias(spec);
+
           // check if import matches one of the directories
           for (const dir of options.directories) {
             // Accept imports like 'widgets/authentication/createShopLayout' or 'widgets/CreateShopLayout'
-            if (spec === dir || spec.startsWith(`${dir}/`)) {
-              // compute target directory inside src
-              const relToSrc = spec; // e.g. widgets/authentication/createShopLayout
-              const barrelIndexPath = path.resolve(projectRoot, 'src', relToSrc, 'index.ts');
+            // Also accept aliased imports like '@/widgets/authentication/createShopLayout'
+            const specToCheck = isAliased ? resolvedSpec : spec;
 
-              if (!fs.existsSync(barrelIndexPath)) continue;
+            if (specToCheck === dir || specToCheck.startsWith(`${dir}/`)) {
+              // compute target directory inside rootDir(s)
+              const relToRoot = specToCheck; // e.g. widgets/authentication/createShopLayout
+
+              // Try to find barrel file in one of the rootDirs and barrel file patterns
+              let foundRootDir: string | null = null;
+              let barrelFilePath: string | null = null;
+
+              outerLoop: for (const rootDir of rootDirs) {
+                for (const barrelFile of barrelFiles) {
+                  const candidatePath = path.resolve(projectRoot, rootDir, relToRoot, barrelFile);
+                  if (fs.existsSync(candidatePath)) {
+                    foundRootDir = rootDir;
+                    barrelFilePath = candidatePath;
+                    break outerLoop;
+                  }
+                }
+              }
+
+              if (!barrelFilePath || !foundRootDir) continue;
 
               // get named imports
               if (node.importClause?.namedBindings && ts.isNamedImports(node.importClause.namedBindings)) {
@@ -119,9 +215,10 @@ export function resolveBarrelsPlugin(options: Options) {
                   // resolve where this original exported name comes from by walking re-exports
                   const dirMap = maps.get(dir) ?? new Map<string, string>();
                   const resolved = resolveExportThroughBarrel(
-                    path.resolve(projectRoot, 'src', relToSrc),
+                    path.resolve(projectRoot, foundRootDir, relToRoot),
                     originalName,
-                    dirMap
+                    dirMap,
+                    barrelFiles
                   );
 
                   if (resolved) {
@@ -137,7 +234,10 @@ export function resolveBarrelsPlugin(options: Options) {
                       }
                     } else {
                       if (!relPath.startsWith('.')) relPath = `./${relPath}`;
-                      relPath = relPath.replace(/\.(ts|tsx|js|jsx)$/, '');
+                      // Only strip extensions if preserveExtensions is false
+                      if (!preserveExtensions) {
+                        relPath = relPath.replace(/\.(ts|tsx|js|jsx)$/, '');
+                      }
                       if (actualExportName === localName) {
                         replacements.push(`import { ${actualExportName} } from '${relPath}';`);
                       } else {
