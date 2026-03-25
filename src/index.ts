@@ -259,7 +259,21 @@ export function resolveBarrelsPlugin(options: Options) {
                 let newText = '';
                 if (resolvedImports.length > 0) newText += resolvedImports.join('\n');
                 if (unresolvedCount > 0) {
-                  newText += (newText ? '\n' : '') + original;
+                  // Build import statement with ONLY unresolved identifiers (don't include resolved ones)
+                  const unresolvedElements = elements.filter((_, index) => !replacements[index]);
+                  const unresolvedImports = unresolvedElements
+                    .map((el) => {
+                      const localName = el.name.text;
+                      if (el.propertyName && ts.isIdentifier(el.propertyName)) {
+                        const originalName = el.propertyName.text;
+                        return `${originalName} as ${localName}`;
+                      }
+                      return localName;
+                    })
+                    .join(', ');
+
+                  const unresolvedImportStatement = `import { ${unresolvedImports} } from '${spec}';`;
+                  newText += (newText ? '\n' : '') + unresolvedImportStatement;
                 }
 
                 // log either transform details or a simple 'not transformed' message

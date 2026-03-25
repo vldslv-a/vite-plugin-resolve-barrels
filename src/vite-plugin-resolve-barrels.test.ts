@@ -884,3 +884,45 @@ describe('Enhanced alias resolution with custom rootDirs', () => {
     callPluginMethod(plugin, 'buildEnd');
   });
 });
+
+describe('Mixed resolved and unresolved imports (v0.2.0 bug fix)', () => {
+  test('does not duplicate identifiers when some imports are resolved and some are not', () => {
+    const srcDir = path.join(tmpDir, 'src', 'widgets');
+
+    // Create a file with one export that will be resolved
+    const resolvedPath = path.join(srcDir, 'resolved.ts');
+    fs.writeFileSync(resolvedPath, 'export const ResolvedSymbol = 42;\n');
+
+    // Create index that only re-exports ResolvedSymbol
+    const indexPath = path.join(srcDir, 'index.ts');
+    fs.writeFileSync(indexPath, "export { ResolvedSymbol } from './resolved';\n");
+
+    const consumerPath = path.join(tmpDir, 'src', 'consumer', 'file.ts');
+    // Import both ResolvedSymbol (can be resolved) and UnresolvedSymbol (cannot be resolved)
+    const originalCode =
+      "import { ResolvedSymbol, UnresolvedSymbol } from 'widgets';\nconsole.log(ResolvedSymbol, UnresolvedSymbol);\n";
+    fs.writeFileSync(consumerPath, originalCode);
+
+    process.chdir(tmpDir);
+
+    const plugin = resolveBarrelsPlugin({ directories: ['widgets'], enable: true });
+    callPluginMethod(plugin, 'buildStart');
+
+    const res = callPluginMethod(plugin, 'transform', originalCode, consumerPath);
+
+    expect(res).not.toBeNull();
+    const { code } = res!;
+
+    // Should have direct import for ResolvedSymbol
+    expect(code).toMatch(/import \{ ResolvedSymbol \} from '.*resolved'/);
+
+    // Should have fallback import ONLY for UnresolvedSymbol (not the original with both)
+    expect(code).toMatch(/import \{ UnresolvedSymbol \} from 'widgets'/);
+
+    // CRITICAL: ResolvedSymbol should appear only ONCE in imports (not duplicated)
+    const resolvedSymbolMatches = code.match(/import.*ResolvedSymbol/g);
+    expect(resolvedSymbolMatches).toHaveLength(1);
+
+    callPluginMethod(plugin, 'buildEnd');
+  });
+});
