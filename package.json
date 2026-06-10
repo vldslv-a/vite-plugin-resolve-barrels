@@ -1,6 +1,6 @@
 {
   "name": "vite-plugin-resolve-barrels",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "Vite plugin for optimizing React barrel file imports - reduces bundle size and improves build performance",
   "type": "module",
   "main": "dist/index.js",
@@ -16,7 +16,9 @@
   },
   "packageManager": "pnpm@10.33.2",
   "pnpm": {
-    "onlyBuiltDependencies": ["unrs-resolver"]
+    "onlyBuiltDependencies": [
+      "unrs-resolver"
+    ]
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
