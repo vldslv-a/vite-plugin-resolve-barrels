@@ -13,17 +13,21 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
           node-version: '20'
+          cache: pnpm
           registry-url: 'https://registry.npmjs.org'
 
       - name: Install dependencies
-        run: npm install
+        run: pnpm install --frozen-lockfile
 
       - name: Build
-        run: npm run build
+        run: pnpm build
 
       - name: Update package.json version
         run: |
@@ -32,17 +36,17 @@ jobs:
           # Remove 'v' prefix if present
           version=${tag_version#v}
           if [ "$current_version" != "$version" ]; then
-            npm version $version --no-git-tag-version
+            pnpm version $version --no-git-tag-version
           else
-            echo "Version not changed. Skipping npm version."
+            echo "Version not changed. Skipping version bump."
           fi
 
       - name: Publish package on NPM.js
         run: |
           if [ "${{ github.event.release.prerelease }}" = "true" ]; then
-            npm publish --tag beta
+            pnpm publish --tag beta --no-git-checks
           else
-            npm publish
+            pnpm publish --no-git-checks
           fi
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_PUBLISH_TOKEN }}
