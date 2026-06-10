@@ -1,6 +1,5 @@
 {
   "compilerOptions": {
-    "baseUrl": "./",
     "target": "esnext",
     "module": "nodenext",
     "moduleResolution": "nodenext",
@@ -18,12 +17,6 @@
       "node",
       "jest"
     ],
-    "paths": {
-      "*": [
-        "./src/*",
-        "*"
-      ]
-    }
   },
   "exclude": [
     "**/node_modules/*",

@@ -2,7 +2,7 @@
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import pluginJs from '@eslint/js';
-import importPlugin from 'eslint-plugin-import';
+import importPlugin from 'eslint-plugin-import-x';
 import eslintPluginPrettierRecommended from 'eslint-plugin-prettier/recommended';
 import sonarjs from 'eslint-plugin-sonarjs';
 import eslintPluginSortDestructureKeys from 'eslint-plugin-sort-destructure-keys';
@@ -27,7 +27,7 @@ const config = [
       'sort-destructure-keys/sort-destructure-keys': 'error',
     },
     settings: {
-      'import/resolver': {
+      'import-x/resolver': {
         node: {
           paths: ['src'],
         },
@@ -145,12 +145,12 @@ const config = [
       'sonarjs/todo-tag': 'off',
 
       // Import rules
-      'import/consistent-type-specifier-style': ['error', 'prefer-top-level'],
-      'import/extensions': ['error', 'never'],
-      'import/no-cycle': 'error',
-      'import/no-extraneous-dependencies': ['error', { devDependencies: true }],
-      'import/newline-after-import': 'error',
-      'import/order': [
+      'import-x/consistent-type-specifier-style': ['error', 'prefer-top-level'],
+      'import-x/extensions': ['error', 'never'],
+      'import-x/no-cycle': 'error',
+      'import-x/no-extraneous-dependencies': ['error', { devDependencies: true }],
+      'import-x/newline-after-import': 'error',
+      'import-x/order': [
         'error',
         {
           'newlines-between': 'never',
