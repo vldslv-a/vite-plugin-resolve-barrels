@@ -1,3 +1,3 @@
-npm run check-types
-npm run lint:js
-npm test
+pnpm check-types
+pnpm lint:js
+pnpm test
