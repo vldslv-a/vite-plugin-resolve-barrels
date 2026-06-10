@@ -227,7 +227,9 @@ export function resolveBarrelsPlugin(options: Options) {
                     const actualExportName = resolved.importName || originalName;
                     if (resolved.external) {
                       // import directly from external package specifier
-                      if (actualExportName === localName) {
+                      if (actualExportName === 'default') {
+                        replacements.push(`import ${localName} from '${abs}';`);
+                      } else if (actualExportName === localName) {
                         replacements.push(`import { ${actualExportName} } from '${abs}';`);
                       } else {
                         replacements.push(`import { ${actualExportName} as ${localName} } from '${abs}';`);
@@ -238,7 +240,9 @@ export function resolveBarrelsPlugin(options: Options) {
                       if (!preserveExtensions) {
                         relPath = relPath.replace(/\.(ts|tsx|js|jsx)$/, '');
                       }
-                      if (actualExportName === localName) {
+                      if (actualExportName === 'default') {
+                        replacements.push(`import ${localName} from '${relPath}';`);
+                      } else if (actualExportName === localName) {
                         replacements.push(`import { ${actualExportName} } from '${relPath}';`);
                       } else {
                         replacements.push(`import { ${actualExportName} as ${localName} } from '${relPath}';`);

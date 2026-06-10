@@ -926,3 +926,92 @@ describe('Mixed resolved and unresolved imports (v0.2.0 bug fix)', () => {
     callPluginMethod(plugin, 'buildEnd');
   });
 });
+
+describe('Default export support', () => {
+  test('resolves barrel re-export of default function to default import', () => {
+    const componentPath = path.join(tmpDir, 'src', 'widgets', 'SearchFilters.tsx');
+    fs.writeFileSync(componentPath, 'export default function SearchFilters() { return null; }\n');
+
+    const indexPath = path.join(tmpDir, 'src', 'widgets', 'index.ts');
+    fs.writeFileSync(indexPath, "export { default as SearchFilters } from './SearchFilters';\n");
+
+    const consumerPath = path.join(tmpDir, 'src', 'consumer', 'page.tsx');
+    const originalCode = "import { SearchFilters } from 'widgets';\n";
+    fs.writeFileSync(consumerPath, originalCode);
+
+    process.chdir(tmpDir);
+    const plugin = resolveBarrelsPlugin({ directories: ['widgets'], enable: true });
+    callPluginMethod(plugin, 'buildStart');
+    const res = callPluginMethod(plugin, 'transform', originalCode, consumerPath);
+
+    expect(res).not.toBeNull();
+    expect(res!.code).toMatch(/import SearchFilters from '.*SearchFilters'/);
+    expect(res!.code).not.toContain('import {');
+    callPluginMethod(plugin, 'buildEnd');
+  });
+
+  test('resolves barrel re-export of default class to default import', () => {
+    const componentPath = path.join(tmpDir, 'src', 'widgets', 'MyClass.ts');
+    fs.writeFileSync(componentPath, 'export default class MyClass {}\n');
+
+    const indexPath = path.join(tmpDir, 'src', 'widgets', 'index.ts');
+    fs.writeFileSync(indexPath, "export { default as MyClass } from './MyClass';\n");
+
+    const consumerPath = path.join(tmpDir, 'src', 'consumer', 'consumer.ts');
+    const originalCode = "import { MyClass } from 'widgets';\n";
+    fs.writeFileSync(consumerPath, originalCode);
+
+    process.chdir(tmpDir);
+    const plugin = resolveBarrelsPlugin({ directories: ['widgets'], enable: true });
+    callPluginMethod(plugin, 'buildStart');
+    const res = callPluginMethod(plugin, 'transform', originalCode, consumerPath);
+
+    expect(res).not.toBeNull();
+    expect(res!.code).toMatch(/import MyClass from '.*MyClass'/);
+    expect(res!.code).not.toContain('import {');
+    callPluginMethod(plugin, 'buildEnd');
+  });
+
+  test('resolves barrel re-export of default assignment to default import', () => {
+    const componentPath = path.join(tmpDir, 'src', 'widgets', 'utils.ts');
+    fs.writeFileSync(componentPath, 'const helper = () => {};\nexport default helper;\n');
+
+    const indexPath = path.join(tmpDir, 'src', 'widgets', 'index.ts');
+    fs.writeFileSync(indexPath, "export { default as helper } from './utils';\n");
+
+    const consumerPath = path.join(tmpDir, 'src', 'consumer', 'consumer.ts');
+    const originalCode = "import { helper } from 'widgets';\n";
+    fs.writeFileSync(consumerPath, originalCode);
+
+    process.chdir(tmpDir);
+    const plugin = resolveBarrelsPlugin({ directories: ['widgets'], enable: true });
+    callPluginMethod(plugin, 'buildStart');
+    const res = callPluginMethod(plugin, 'transform', originalCode, consumerPath);
+
+    expect(res).not.toBeNull();
+    expect(res!.code).toMatch(/import helper from '.*utils'/);
+    expect(res!.code).not.toContain('import {');
+    callPluginMethod(plugin, 'buildEnd');
+  });
+
+  test('resolves default re-export with local alias in user import', () => {
+    const componentPath = path.join(tmpDir, 'src', 'widgets', 'Button.tsx');
+    fs.writeFileSync(componentPath, 'export default function Button() { return null; }\n');
+
+    const indexPath = path.join(tmpDir, 'src', 'widgets', 'index.ts');
+    fs.writeFileSync(indexPath, "export { default as Button } from './Button';\n");
+
+    const consumerPath = path.join(tmpDir, 'src', 'consumer', 'page.tsx');
+    const originalCode = "import { Button as Btn } from 'widgets';\n";
+    fs.writeFileSync(consumerPath, originalCode);
+
+    process.chdir(tmpDir);
+    const plugin = resolveBarrelsPlugin({ directories: ['widgets'], enable: true });
+    callPluginMethod(plugin, 'buildStart');
+    const res = callPluginMethod(plugin, 'transform', originalCode, consumerPath);
+
+    expect(res).not.toBeNull();
+    expect(res!.code).toMatch(/import Btn from '.*Button'/);
+    callPluginMethod(plugin, 'buildEnd');
+  });
+});

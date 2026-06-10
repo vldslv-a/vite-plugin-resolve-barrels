@@ -67,9 +67,9 @@ function handleVariableStatement(node: ts.VariableStatement): ExportInfo[] {
 function handleTypeDeclaration(
   node: ts.ClassDeclaration | ts.EnumDeclaration | ts.FunctionDeclaration | ts.InterfaceDeclaration
 ): ExportInfo[] {
-  if (node.name && ts.isIdentifier(node.name)) {
-    return [{ name: node.name.text }];
-  }
+  const isDefault = node.modifiers?.some((m) => m.kind === ts.SyntaxKind.DefaultKeyword) ?? false;
+  if (isDefault) return [{ name: 'default' }];
+  if (node.name && ts.isIdentifier(node.name)) return [{ name: node.name.text }];
   return [];
 }
 
@@ -82,6 +82,8 @@ export function parseExportsFromFile(filePath: string): ExportInfo[] {
     sourceFile.forEachChild((node) => {
       if (ts.isExportDeclaration(node)) {
         exports.push(...handleExportDeclaration(node));
+      } else if (ts.isExportAssignment(node) && !node.isExportEquals) {
+        exports.push({ name: 'default' });
       } else if (ts.isVariableStatement(node) && node.modifiers?.some((m) => m.kind === ts.SyntaxKind.ExportKeyword)) {
         exports.push(...handleVariableStatement(node));
       } else if (
